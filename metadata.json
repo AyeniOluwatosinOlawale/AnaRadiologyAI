@@ -1,0 +1,5 @@
+{
+  "name": "AnaRadiologyAI Assistant",
+  "description": "An AI-powered radiology assistant that analyzes imaging reports for patients and generates detailed case studies for radiologists and students, leveraging advanced language models for educational purposes.",
+  "requestFramePermissions": []
+}
