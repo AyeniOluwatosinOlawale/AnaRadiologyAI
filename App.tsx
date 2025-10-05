@@ -1,23 +1,62 @@
+
 import React, { useState, useEffect } from 'react';
 import ChatView from './components/ChatView';
 import Sidebar from './components/Sidebar';
-import { AppMode } from './types';
+import { AppMode, Model } from './types';
 import type { Conversation, Message } from './types';
 import Disclaimer from './components/Disclaimer';
 import { UserIcon, AcademicCapIcon, SparklesIcon } from './components/icons';
 import { analyzeSymptoms, generateCaseStudy, generateChatTitle } from './services/geminiService';
+import * as ollamaService from './services/ollamaService';
 
 const WELCOME_MESSAGES = {
   [AppMode.PATIENT]: "Hello! I'm AnaRadiologyAI Assistant. I can provide general educational information about findings in your radiology report. To begin, please describe what your report says.",
   [AppMode.PROFESSIONAL]: "Welcome. As AnaRadiologyAI Assistant, I can generate detailed radiology case studies for educational purposes. Please provide a scenario, modality (e.g., CT Chest), or patient profile to begin.",
 };
 
+// Helper function to load conversations from local storage
+const getInitialConversations = (): Conversation[] => {
+    try {
+        const saved = localStorage.getItem('ana-radiology-ai-conversations');
+        if (saved) {
+            const parsed = JSON.parse(saved) as Conversation[];
+            if (Array.isArray(parsed)) {
+                // Add default model for old conversations for backwards compatibility
+                return parsed.map(c => ({...c, model: c.model || Model.GEMINI}));
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load or parse conversations from local storage", e);
+    }
+    return [];
+};
+
 const App: React.FC = () => {
-  const [view, setView] = useState<'landing' | 'chat'>('landing');
-  const [currentMode, setCurrentMode] = useState<AppMode | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const initialConversations = getInitialConversations();
+  const hasInitialConversations = initialConversations.length > 0;
+  const latestInitialConversation = hasInitialConversations ? initialConversations[0] : null;
+
+  const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
+  const [view, setView] = useState<'landing' | 'chat'>(
+    hasInitialConversations ? 'chat' : 'landing'
+  );
+  const [currentMode, setCurrentMode] = useState<AppMode | null>(
+    latestInitialConversation ? latestInitialConversation.mode : null
+  );
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(
+    latestInitialConversation ? latestInitialConversation.id : null
+  );
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [selectedModel, setSelectedModel] = useState<Model>(Model.GEMINI);
+
+  // Effect to save conversations to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem('ana-radiology-ai-conversations', JSON.stringify(conversations));
+    } catch (error) {
+      console.error("Failed to save conversations to local storage:", error);
+    }
+  }, [conversations]);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 
@@ -28,6 +67,7 @@ const App: React.FC = () => {
       id: newConversationId,
       title: 'New Chat',
       mode: mode,
+      model: selectedModel,
       messages: [
         {
           id: 'welcome-' + Date.now(),
@@ -74,7 +114,11 @@ const App: React.FC = () => {
 
     // Generate title for new chats
     if (isNewChat) {
-      generateChatTitle(inputText).then(title => {
+      const titlePromise = activeConversation.model === Model.OLLAMA
+        ? ollamaService.generateChatTitle(inputText)
+        : generateChatTitle(inputText);
+        
+      titlePromise.then(title => {
         setConversations(prev => prev.map(c =>
           c.id === activeConversationId ? { ...c, title } : c
         ));
@@ -83,13 +127,28 @@ const App: React.FC = () => {
 
     try {
       let aiResponse: Message;
+
+      const services = {
+        [Model.GEMINI]: {
+          symptoms: analyzeSymptoms,
+          caseStudy: generateCaseStudy,
+        },
+        [Model.OLLAMA]: {
+          symptoms: ollamaService.analyzeSymptoms,
+          caseStudy: ollamaService.generateCaseStudy,
+        }
+      };
+      
+      const activeServices = services[activeConversation.model] || services[Model.GEMINI];
+
       if (activeConversation.mode === AppMode.PATIENT) {
-        const analysis = await analyzeSymptoms(inputText);
+        const analysis = await activeServices.symptoms(inputText);
         aiResponse = { id: 'ai-' + Date.now(), sender: 'ai', content: analysis, type: 'text' };
       } else {
-        const caseStudy = await generateCaseStudy(inputText);
+        const caseStudy = await activeServices.caseStudy(inputText);
         aiResponse = { id: 'ai-' + Date.now(), sender: 'ai', content: caseStudy, type: 'caseStudy' };
       }
+
       setConversations(prev => prev.map(c =>
         c.id === activeConversationId
           ? { ...c, messages: [...c.messages, aiResponse] }
@@ -108,26 +167,29 @@ const App: React.FC = () => {
   };
 
 
-  if (view === 'chat' && currentMode) {
+  if (view === 'chat' && currentMode && activeConversation) {
     return (
         <div className="flex h-screen bg-gray-100 font-sans text-slate-900">
             <Sidebar
                 conversations={conversations}
                 activeConversationId={activeConversationId}
                 onSelectConversation={handleSelectConversation}
-                onNewChat={handleStartChat}
+                onNewChat={() => handleStartChat(currentMode)}
                 currentMode={currentMode}
             />
-            {activeConversation && (
-                <ChatView
-                    key={activeConversation.id}
-                    mode={activeConversation.mode}
-                    messages={activeConversation.messages}
-                    isLoading={isLoading}
-                    onSendMessage={handleSendMessage}
-                    onExit={() => setView('landing')} // This could be repurposed for a "close" button
-                />
-            )}
+            <ChatView
+                key={activeConversation.id}
+                mode={activeConversation.mode}
+                model={activeConversation.model}
+                messages={activeConversation.messages}
+                isLoading={isLoading}
+                onSendMessage={handleSendMessage}
+                onExit={() => {
+                    setView('landing');
+                    setActiveConversationId(null);
+                    setCurrentMode(null);
+                }}
+            />
         </div>
     );
   }
@@ -177,6 +239,18 @@ const App: React.FC = () => {
             <p className="mt-6 max-w-2xl mx-auto text-lg text-slate-600">
               Your AI-powered assistant for radiology information. Get educational analysis of your imaging reports or generate detailed radiology cases for learning.
             </p>
+            <div className="mt-8 max-w-xs mx-auto">
+              <label htmlFor="model-select" className="block text-sm font-medium text-slate-700 mb-1">Select AI Model</label>
+              <select
+                id="model-select"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value as Model)}
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm rounded-md shadow-sm"
+              >
+                <option value={Model.GEMINI}>Gemini 2.5 Flash</option>
+                <option value={Model.OLLAMA}>Mistral (Ollama)</option>
+              </select>
+            </div>
             <div className="mt-10 flex flex-col sm:flex-row justify-center items-center gap-4">
               <button
                 onClick={() => handleStartChat(AppMode.PATIENT)}

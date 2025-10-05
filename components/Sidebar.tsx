@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Conversation } from '../types';
-import { AppMode } from '../types';
+import { AppMode, Model } from '../types';
 import { PlusIcon, ChatBubbleLeftRightIcon } from './icons';
 
 interface SidebarProps {
@@ -22,6 +22,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     onNewChat(mode);
   };
   
+  const ModelBadge: React.FC<{ model: Model }> = ({ model }) => {
+    if (model === Model.OLLAMA) {
+      return <span className="flex-shrink-0 text-xs font-semibold bg-green-200 text-green-800 px-2 py-0.5 rounded-full">Ollama</span>;
+    }
+    return <span className="flex-shrink-0 text-xs font-semibold bg-sky-200 text-sky-800 px-2 py-0.5 rounded-full">Gemini</span>;
+  };
+
   return (
     <div className="w-72 bg-gray-800 text-white flex flex-col h-screen p-3">
       <div className="flex-shrink-0">
@@ -51,6 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             >
               <ChatBubbleLeftRightIcon className="w-5 h-5 flex-shrink-0 text-gray-400" />
               <span className="flex-1 truncate">{conv.title}</span>
+              <ModelBadge model={conv.model} />
             </button>
           ))}
         </nav>

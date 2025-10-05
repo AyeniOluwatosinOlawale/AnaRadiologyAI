@@ -3,6 +3,11 @@ export enum AppMode {
   PROFESSIONAL = 'PROFESSIONAL',
 }
 
+export enum Model {
+  GEMINI = 'GEMINI',
+  OLLAMA = 'OLLAMA',
+}
+
 export interface CaseStudy {
   title: string;
   patientProfile: {
@@ -31,4 +36,5 @@ export interface Conversation {
   title: string;
   messages: Message[];
   mode: AppMode;
+  model: Model;
 }

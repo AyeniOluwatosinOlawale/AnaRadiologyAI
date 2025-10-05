@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AppMode } from '../types';
+import { AppMode, Model } from '../types';
 import type { Message } from '../types';
 import ChatMessage from './PatientView';
 import ChatInput from './ProfessionalView';
@@ -9,13 +9,14 @@ import { RobotIcon, ArrowLeftIcon } from './icons';
 
 interface ChatViewProps {
     mode: AppMode;
+    model: Model;
     messages: Message[];
     isLoading: boolean;
     onSendMessage: (text: string) => void;
     onExit: () => void;
 }
 
-const ChatView: React.FC<ChatViewProps> = ({ mode, messages, isLoading, onSendMessage, onExit }) => {
+const ChatView: React.FC<ChatViewProps> = ({ mode, model, messages, isLoading, onSendMessage, onExit }) => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isNewChat = messages.length === 1 && messages[0].type === 'welcome';
 
@@ -27,6 +28,7 @@ const ChatView: React.FC<ChatViewProps> = ({ mode, messages, isLoading, onSendMe
 
 
   const modeTitle = mode === AppMode.PATIENT ? 'Patient Mode' : 'Professional Mode';
+  const modelName = model === Model.OLLAMA ? 'Mistral (Ollama)' : 'Gemini 2.5 Flash';
   const modeColor = mode === AppMode.PATIENT ? 'text-sky-600' : 'text-teal-600';
 
   return (
@@ -48,7 +50,9 @@ const ChatView: React.FC<ChatViewProps> = ({ mode, messages, isLoading, onSendMe
              <h1 className="text-xl font-bold text-slate-800">
                 AnaRadiologyAI Assistant
              </h1>
-             <p className={`text-sm font-semibold ${modeColor}`}>{modeTitle}</p>
+             <p className={`text-sm font-semibold ${modeColor}`}>
+                {modeTitle} &bull; <span className="text-gray-500 font-medium">{modelName}</span>
+             </p>
           </div>
           <div className="w-10"></div> {/* Spacer to balance the back button */}
       </header>
